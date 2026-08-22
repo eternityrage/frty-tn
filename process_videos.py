@@ -2,7 +2,7 @@
 Video Processor - Quality Enhancement (Video + Audio)
 1. Extend 6-second videos to 12 seconds (loop once)
 2. Upscale video to 1080x1920 with quality enhancement
-3. Remove watermark (bottom-right corner)
+3. Remove Gemini watermark (bottom-right)
 4. ENHANCE AUDIO (normalize volume, improve clarity) - if audio exists
 """
 import os
@@ -87,10 +87,11 @@ def process_single_video(video_path):
     print(f"Original size: {width}x{height}")
     print(f"Has audio: {'Yes' if has_audio else 'No'}")
 
-    w_delogo = 180
-    h_delogo = 80
-    x_delogo = 1080 - w_delogo - 5
-    y_delogo = 1920 - h_delogo - 5
+    # Gemini watermark (bottom-right): occupies ~x 895-1000, y 1670-1805 in 1080x1920 space
+    w_delogo = 170
+    h_delogo = 190
+    x_delogo = 885
+    y_delogo = 1645
 
     print(f"Processing {filename}...")
     print(f"  Upscaling to: 1080x1920")
