@@ -14,5 +14,21 @@
             },
             "recycled": false
         }
+    },
+    {
+        "video_name": "Apple_explaining_health_benefits_202608230045.mp4",
+        "metadata": {
+            "title": "Gary the Grape's Existential Crisis: Is This All There Is?! (Spoiler: NO!)",
+            "description": "Poor Gary. He's been hanging on the vine, contemplating the very meaning of grape-ness, when BAM! He discovers the true power within. Turns out, those tiny little grapes are packed with antioxidants that fight off nasty free radicals, basically giving your body its own tiny superhero squad! So next time you pop a grape, remember you're not just eating a snack, you're unleashing a cellular defense system.  Tag a friend who needs more grapes (or any tiny, antioxidant-rich superhero) in their life!  Comment your favorite fruit or veggie below and let us know what superpowers you think they have! Share this with someone who hates eating healthy \u2013 maybe Gary's crisis will inspire them! Follow FruityToon for daily funny food facts that'll make you LOL and feel great!",
+            "success_flags": {
+                "instagram_reel": true,
+                "instagram_story": true,
+                "facebook_reel": true,
+                "facebook_story": true,
+                "threads": false,
+                "youtube": false
+            },
+            "recycled": true
+        }
     }
 ]
