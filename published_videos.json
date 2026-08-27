@@ -222,5 +222,21 @@
             },
             "recycled": true
         }
+    },
+    {
+        "video_name": "Apple_explaining_health_benefits_202608231013.mp4",
+        "metadata": {
+            "title": "Broccoli's Existential Crisis: The Vitamin K Quandary",
+            "description": "In a world of vibrant hues and endless juicing trends, Bartholomew 'Barty' Broccoli finds himself grappling with a profound identity crisis.  Is he merely a cruciferous comedian, or a silent sentinel of bone health?  Join Barty as he navigates the choppy waters of vitamin K deficiency, a crucial nutrient for blood clotting and bone mineralization, all while attempting to maintain his composure in a world obsessed with kale smoothies.  This isn't just a cartoon; it's a deep dive into the unsung heroes of your pantry, delivered with the stoic absurdity only a talking broccoli can provide. Tag a friend who needs more veggies in their life! \ud83e\udd55 Comment your favorite fruit or veggie below! Share this with someone who hates eating healthy! Follow FruityToon for daily funny food facts!",
+            "success_flags": {
+                "instagram_reel": true,
+                "instagram_story": true,
+                "facebook_reel": true,
+                "facebook_story": false,
+                "threads": false,
+                "youtube": false
+            },
+            "recycled": true
+        }
     }
 ]
