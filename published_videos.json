@@ -206,5 +206,21 @@
             },
             "recycled": false
         }
+    },
+    {
+        "video_name": "Pear_explains_health_benefits_202608231013.mp4",
+        "metadata": {
+            "title": "The Avocado Apocalypse: A Picky Eater's Worst Nightmare!",
+            "description": "Prepare for a guacamole-fueled disaster as Barry the Broccoli tries to convince Kevin the Kid that yes, vegetables ARE edible and not, in fact, tiny green aliens plotting world domination! Watch Barry bravely battle Kevin's anti-veggie defenses, armed with nothing but a powerful dose of Vitamin C and a truly questionable sense of humor.  This animated showdown will teach your little ones (and maybe even you!) that embracing your greens can boost your immunity faster than a superhero can leap a tall building!  Will Kevin finally surrender to the deliciousness, or will the Avocado Apocalypse claim another victim? \ud83e\udd14\n\nTag a friend who needs more veggies in their life! \ud83e\udd55\nComment your favorite fruit or veggie below!\nShare this with someone who hates eating healthy!\nFollow FruityToon for daily funny food facts!",
+            "success_flags": {
+                "instagram_reel": true,
+                "instagram_story": true,
+                "facebook_reel": true,
+                "facebook_story": true,
+                "threads": false,
+                "youtube": false
+            },
+            "recycled": true
+        }
     }
 ]
