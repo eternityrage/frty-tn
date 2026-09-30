@@ -1838,5 +1838,21 @@
             },
             "recycled": true
         }
+    },
+    {
+        "video_name": "Apple_and_banana_talking_20260930055625.mp4",
+        "metadata": {
+            "title": "Broccoli's Mid-Life Crisis: Is Kale Really Happier?",
+            "description": "Poor Bartholomew Broccoli is having an existential crisis! He's convinced that sleek, green Kale has it all \u2013 a better social life, more Instagram likes, and a suspiciously shiny sheen. Little does Bart know, his own dense florets are packed with incredible Vitamin C, giving him the immune system of a tiny, leafy superhero! Watch as he grapples with jealousy and learns that true happiness (and disease-fighting power!) comes from within. Tag a friend who needs more veggies in their life! \ud83e\udd55 Comment your favorite fruit or veggie below! Share this with someone who hates eating healthy! Follow FruityToon for daily funny food facts!",
+            "success_flags": {
+                "instagram_reel": true,
+                "instagram_story": true,
+                "facebook_reel": true,
+                "facebook_story": true,
+                "threads": false,
+                "youtube": false
+            },
+            "recycled": false
+        }
     }
 ]
