@@ -23,8 +23,13 @@ wheels/
 .installed.cfg
 *.egg
 
-# Environment variables
+# Environment variables & secrets
 .env
+.env.*
+token_*.json
+*token*.json
+credentials*.json
+client_secret*.json
 
 # Processed videos
 Videos/

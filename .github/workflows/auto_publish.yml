@@ -66,6 +66,9 @@ jobs:
             "FACEBOOK_PAGE_ID"
             "THREADS_ACCESS_TOKEN"
             "THREADS_USER_ID"
+            "YT_CLIENT_ID"
+            "YT_CLIENT_SECRET"
+            "YT_REFRESH_TOKEN"
           )
 
           for secret in "${optional_secrets[@]}"; do
@@ -95,6 +98,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
           THREADS_USER_ID: ${{ secrets.THREADS_USER_ID }}
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
       
       - name: Run automation pipeline
         env:
@@ -119,6 +125,9 @@ jobs:
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          YOUTUBE_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
 
           # AI Caption
           POLLINATIONS_API_KEY: ${{ secrets.POLLINATIONS_API_KEY }}
@@ -142,15 +151,15 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           
-          # Add only the log file (not large video files)
-          git add published_videos.json 2>/dev/null || true
+          # Add only the log & state files (not large video files)
+          git add published_videos.json youtube_publish_state.json 2>/dev/null || true
           
           # Only commit if there are changes
           if ! git diff --staged --quiet; then
-            git commit -m "Update published videos log [skip ci]"
+            git commit -m "Update published videos log & YouTube schedule state [skip ci]"
             git pull --rebase
             git push
-            echo "✅ Committed and pushed published_videos.json"
+            echo "✅ Committed and pushed published_videos.json and youtube_publish_state.json"
           else
             echo "ℹ️ No changes to commit"
           fi

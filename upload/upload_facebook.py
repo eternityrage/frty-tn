@@ -101,11 +101,20 @@ def upload_to_facebook(video_path, description, title="FruityToon"):
         # Step 3: Finish
         print(f"[facebook] Step 3: Publishing Reel...")
         finish_url = f"https://graph.facebook.com/v21.0/{page_id}/video_reels"
+        
+        # Ensure title is prominently featured at top of caption if not already present
+        caption_text = description.strip() if description else ""
+        clean_title = title.strip() if title else ""
+        if clean_title and clean_title not in caption_text:
+            caption_text = f"{clean_title}\n\n{caption_text}"
+
         finish_data = {
             'access_token': access_token,
             'upload_phase': 'finish',
             'video_id': video_id,
-            'description': description,
+            'title': clean_title or "FruityToon",
+            'video_title': clean_title or "FruityToon",
+            'description': caption_text,
             'video_state': 'PUBLISHED'
         }
         res_finish = requests.post(finish_url, data=finish_data, timeout=60)
