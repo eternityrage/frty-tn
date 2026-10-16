@@ -7,12 +7,14 @@ Supports credentials from .env, GitHub Secrets, or local token JSON files.
 import os
 import sys
 import json
+import time
 from pathlib import Path
 from dotenv import load_dotenv
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
+from googleapiclient.errors import HttpError
 
 # Set UTF-8 encoding for Windows console
 if sys.platform == 'win32':
@@ -151,31 +153,63 @@ def upload_to_youtube(video_path, title, description, tags=None, category_id='24
     )
 
     print(f"[youtube] 🚀 Uploading: {clean_title}")
-    request = youtube.videos().insert(
-        part=','.join(body.keys()),
-        body=body,
-        media_body=media
-    )
+    try:
+        request = youtube.videos().insert(
+            part=','.join(body.keys()),
+            body=body,
+            media_body=media
+        )
 
-    response = None
-    while response is None:
-        status, response = request.next_chunk()
-        if status:
-            print(f"[youtube] Progress: {int(status.progress() * 100)}%")
+        response = None
+        retry_count = 0
+        max_retries = 5
+        while response is None:
+            try:
+                status, response = request.next_chunk()
+                if status:
+                    print(f"[youtube] Progress: {int(status.progress() * 100)}%")
+                retry_count = 0
+            except HttpError as e:
+                if e.resp.status in [500, 502, 503, 504] and retry_count < max_retries:
+                    retry_count += 1
+                    sleep_sec = 2 ** retry_count
+                    print(f"[youtube] ⚠️ Transient server error ({e.resp.status}). Retrying chunk in {sleep_sec}s (attempt {retry_count}/{max_retries})...")
+                    time.sleep(sleep_sec)
+                else:
+                    err_msg = e.content.decode('utf-8', errors='ignore') if hasattr(e, 'content') else str(e)
+                    print(f"[youtube] ❌ HTTP Error during upload ({e.resp.status}): {err_msg}")
+                    return {'status': 'failed', 'error': f"HTTP {e.resp.status}: {err_msg}", 'platform': 'youtube'}
+            except (IOError, OSError) as net_err:
+                if retry_count < max_retries:
+                    retry_count += 1
+                    sleep_sec = 2 ** retry_count
+                    print(f"[youtube] ⚠️ Network glitch ({net_err}). Retrying chunk in {sleep_sec}s (attempt {retry_count}/{max_retries})...")
+                    time.sleep(sleep_sec)
+                else:
+                    print(f"[youtube] ❌ Network error: {net_err}")
+                    return {'status': 'failed', 'error': str(net_err), 'platform': 'youtube'}
 
-    video_id = response.get('id')
-    print(f"[youtube] ✅ SUCCESS! Uploaded to YouTube!")
-    print(f"[youtube] Video ID: {video_id}")
-    print(f"[youtube] URL: https://youtube.com/shorts/{video_id}")
-    print("=" * 60)
+        video_id = response.get('id')
+        if not video_id:
+            print(f"[youtube] ❌ No video ID in response: {response}")
+            return {'status': 'failed', 'error': 'No video ID in response', 'platform': 'youtube'}
 
-    return {
-        'status': 'success',
-        'id': video_id,
-        'platform': 'youtube',
-        'url': f'https://youtube.com/shorts/{video_id}',
-        'title': clean_title
-    }
+        print(f"[youtube] ✅ SUCCESS! Uploaded to YouTube!")
+        print(f"[youtube] Video ID: {video_id}")
+        print(f"[youtube] URL: https://youtube.com/shorts/{video_id}")
+        print("=" * 60)
+
+        return {
+            'status': 'success',
+            'id': video_id,
+            'platform': 'youtube',
+            'url': f'https://youtube.com/shorts/{video_id}',
+            'title': clean_title
+        }
+
+    except Exception as e:
+        print(f"[youtube] ❌ Unexpected upload error: {e}")
+        return {'status': 'failed', 'error': str(e), 'platform': 'youtube'}
 
 
 def main():
