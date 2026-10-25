@@ -25,30 +25,47 @@ GOOGLE_DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID")
 GOOGLE_SERVICE_ACCOUNT_KEY = os.getenv("GOOGLE_SERVICE_ACCOUNT_KEY")  # Path to JSON key file
 LOCAL_INPUT_DIR = os.getenv("LOCAL_INPUT_DIR", "Videos")
 
-PUBLISHED_LOG = "published_videos.json"
+BASE_DIR = Path(__file__).resolve().parent
+PUBLISHED_LOG = str(BASE_DIR / "published_videos.json")
+HISTORY_LOG = str(BASE_DIR / "history.json")
 
 
 def get_published_videos():
-    """Get list of already published video names."""
-    if os.path.exists(PUBLISHED_LOG):
-        with open(PUBLISHED_LOG, 'r', encoding='utf-8') as f:
+    """Get list of already published video names from published_videos.json and history.json."""
+    names = set()
+    for log_path in (PUBLISHED_LOG, HISTORY_LOG):
+        if os.path.exists(log_path):
             try:
-                data = json.load(f)
-                return [item.get('video_name', '') for item in data]
-            except json.JSONDecodeError:
-                return []
-    return []
+                with open(log_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    if isinstance(data, list):
+                        for item in data:
+                            v = item.get('video_name')
+                            if v:
+                                names.add(v)
+            except Exception:
+                pass
+    return list(names)
 
 
 def get_published_history():
-    """Get full publishing history with repost counts."""
-    if os.path.exists(PUBLISHED_LOG):
-        with open(PUBLISHED_LOG, 'r', encoding='utf-8') as f:
+    """Get full publishing history from published_videos.json and history.json."""
+    history = []
+    seen = set()
+    for log_path in (PUBLISHED_LOG, HISTORY_LOG):
+        if os.path.exists(log_path):
             try:
-                return json.load(f)
-            except json.JSONDecodeError:
-                return []
-    return []
+                with open(log_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    if isinstance(data, list):
+                        for item in data:
+                            v = item.get('video_name')
+                            if v and v not in seen:
+                                seen.add(v)
+                                history.append(item)
+            except Exception:
+                pass
+    return history
 
 
 def get_repost_counts():

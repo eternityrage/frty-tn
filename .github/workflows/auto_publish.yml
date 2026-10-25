@@ -153,14 +153,15 @@ jobs:
           
           # Add only existing log & state files safely
           [ -f published_videos.json ] && git add published_videos.json
+          [ -f history.json ] && git add history.json
           [ -f youtube_publish_state.json ] && git add youtube_publish_state.json
           
           # Only commit if there are changes
           if ! git diff --staged --quiet; then
-            git commit -m "Update published videos log & YouTube schedule state [skip ci]"
+            git commit -m "Update published videos log, history.json & YouTube schedule state [skip ci]"
             git pull --rebase
             git push
-            echo "✅ Committed and pushed published_videos.json and youtube_publish_state.json"
+            echo "✅ Committed and pushed published_videos.json, history.json and youtube_publish_state.json"
           else
             echo "ℹ️ No changes to commit"
           fi

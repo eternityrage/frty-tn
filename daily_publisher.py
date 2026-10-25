@@ -28,9 +28,11 @@ except ImportError as e:
     print(f"Error importing upload modules: {e}")
     pass
 
-PROCESSED_DIR = "Processed_Videos"
-PUBLISHED_LOG = "published_videos.json"
-YOUTUBE_STATE_FILE = "youtube_publish_state.json"
+BASE_DIR = Path(__file__).resolve().parent
+PROCESSED_DIR = str(BASE_DIR / "Processed_Videos")
+PUBLISHED_LOG = str(BASE_DIR / "published_videos.json")
+HISTORY_LOG = str(BASE_DIR / "history.json")
+YOUTUBE_STATE_FILE = str(BASE_DIR / "youtube_publish_state.json")
 
 
 # ==============================================================================
@@ -74,14 +76,21 @@ def extract_video_subject(video_name: str) -> dict:
 
 
 def get_already_published():
-    """Load list of published videos from log file."""
-    if os.path.exists(PUBLISHED_LOG):
-        with open(PUBLISHED_LOG, 'r', encoding='utf-8') as f:
+    """Load list of published videos from log files (merging published_videos.json and history.json)."""
+    videos_map = {}
+    for log_path in (PUBLISHED_LOG, HISTORY_LOG):
+        if os.path.exists(log_path):
             try:
-                return json.load(f)
-            except json.JSONDecodeError:
-                return []
-    return []
+                with open(log_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    if isinstance(data, list):
+                        for item in data:
+                            vname = item.get("video_name")
+                            if vname and vname not in videos_map:
+                                videos_map[vname] = item
+            except Exception as e:
+                print(f"Notice reading {log_path}: {e}")
+    return list(videos_map.values())
 
 
 def get_repost_counts():
@@ -95,14 +104,31 @@ def get_repost_counts():
 
 
 def mark_as_published(video_name, metadata):
-    """Save publication record with timestamp to JSON."""
-    published = get_already_published()
-    published.append({
+    """Save publication record with timestamp to both published_videos.json and history.json."""
+    record = {
         "video_name": video_name,
         "metadata": metadata
-    })
-    with open(PUBLISHED_LOG, 'w', encoding='utf-8') as f:
-        json.dump(published, f, indent=4)
+    }
+
+    for log_path in (PUBLISHED_LOG, HISTORY_LOG):
+        data = []
+        if os.path.exists(log_path):
+            try:
+                with open(log_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    if not isinstance(data, list):
+                        data = []
+            except Exception:
+                data = []
+
+        data.append(record)
+        try:
+            with open(log_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=4)
+        except Exception as e:
+            print(f"⚠️ Error saving {log_path}: {e}")
+
+    print(f"💾 Recorded publication to {PUBLISHED_LOG} and {HISTORY_LOG}")
 
 
 # ==============================================================================
@@ -144,24 +170,34 @@ def get_last_youtube_publish_date():
 def should_publish_to_youtube():
     """
     Enforces YouTube publishing policy:
-    1. NEVER publish more than ONCE in the same calendar day.
-    2. Eligible to publish once per daily pipeline run.
+    1. Publish strictly on TUESDAY, THURSDAY, and SUNDAY only (3 days per week).
+    2. NEVER publish more than ONCE in the same calendar day.
     """
-    today = datetime.datetime.now(datetime.timezone.utc).date()
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    today = now_utc.date()
+    day_name = today.strftime("%A")  # 'Monday', 'Tuesday', ...
+    weekday = today.weekday()        # 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun
+
+    ALLOWED_DAYS = {1: "Tuesday", 3: "Thursday", 6: "Sunday"}
+
+    if weekday not in ALLOWED_DAYS:
+        allowed_names = ", ".join(ALLOWED_DAYS.values())
+        return False, f"YouTube schedule policy: {allowed_names} only. Today is {day_name}. YouTube upload skipped."
+
     last_date = get_last_youtube_publish_date()
 
     if last_date is None:
-        return True, "No previous YouTube upload found. Eligible to publish today."
+        return True, f"Today is {day_name} (approved YouTube day). No previous YouTube upload found."
 
     days_diff = (today - last_date).days
 
     if days_diff == 0:
-        return False, f"YouTube has ALREADY published today ({last_date}). Policy: Maximum once a day."
+        return False, f"YouTube has ALREADY published today ({day_name}, {last_date}). Policy: Maximum once per day on publishing days."
 
     if days_diff < 0:
         return False, f"Clock anomaly: Last YouTube publish recorded in future ({last_date}). Skipping YouTube upload."
 
-    return True, f"Eligible to publish (last YouTube upload was {days_diff} day(s) ago on {last_date})."
+    return True, f"Today is {day_name} (approved YouTube day). Last publish was {days_diff} day(s) ago on {last_date}."
 
 
 def record_youtube_publish(video_name, video_id=None):
