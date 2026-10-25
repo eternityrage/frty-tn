@@ -1,6 +1,12 @@
 name: Auto Publish Videos
 
 on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'README.md'
+      - '.gitignore'
   schedule:
     - cron: '0 8 * * *'
   workflow_dispatch:
