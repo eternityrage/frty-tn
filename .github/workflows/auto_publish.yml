@@ -147,20 +147,59 @@ jobs:
           echo "✅ Pipeline completed successfully"
       
       - name: Commit published videos log
+        if: always()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           
-          # Add only existing log & state files safely
+          # Backup current state files generated during this run
+          mkdir -p /tmp/state_backup
+          [ -f published_videos.json ] && cp published_videos.json /tmp/state_backup/
+          [ -f history.json ] && cp history.json /tmp/state_backup/
+          [ -f youtube_publish_state.json ] && cp youtube_publish_state.json /tmp/state_backup/
+          
+          # Pull latest remote changes
+          git pull --rebase origin main || git rebase --abort || true
+          
+          # Merge local backup records with any remote records
+          python3 -c "
+import json, os
+
+def merge_logs(target_file, backup_file):
+    records_map = {}
+    for path in (target_file, backup_file):
+        if os.path.exists(path):
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    if isinstance(data, list):
+                        for item in data:
+                            vname = item.get('video_name')
+                            if vname and vname not in records_map:
+                                records_map[vname] = item
+            except Exception:
+                pass
+    merged = list(records_map.values())
+    if merged:
+        with open(target_file, 'w', encoding='utf-8') as f:
+            json.dump(merged, f, indent=4)
+
+merge_logs('published_videos.json', '/tmp/state_backup/published_videos.json')
+merge_logs('history.json', '/tmp/state_backup/history.json')
+
+if os.path.exists('/tmp/state_backup/youtube_publish_state.json'):
+    import shutil
+    shutil.copy('/tmp/state_backup/youtube_publish_state.json', 'youtube_publish_state.json')
+"
+          
+          # Stage and commit
           [ -f published_videos.json ] && git add published_videos.json
           [ -f history.json ] && git add history.json
           [ -f youtube_publish_state.json ] && git add youtube_publish_state.json
           
-          # Only commit if there are changes
           if ! git diff --staged --quiet; then
             git commit -m "Update published videos log, history.json & YouTube schedule state [skip ci]"
-            git pull --rebase
-            git push
+            git push origin main || (git pull --rebase -X theirs origin main && git push origin main)
             echo "✅ Committed and pushed published_videos.json, history.json and youtube_publish_state.json"
           else
             echo "ℹ️ No changes to commit"
