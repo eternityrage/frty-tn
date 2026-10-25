@@ -151,8 +151,9 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           
-          # Add only the log & state files (not large video files)
-          git add published_videos.json youtube_publish_state.json 2>/dev/null || true
+          # Add only existing log & state files safely
+          [ -f published_videos.json ] && git add published_videos.json
+          [ -f youtube_publish_state.json ] && git add youtube_publish_state.json
           
           # Only commit if there are changes
           if ! git diff --staged --quiet; then

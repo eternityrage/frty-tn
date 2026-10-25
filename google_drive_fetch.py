@@ -56,8 +56,9 @@ def get_repost_counts():
     history = get_published_history()
     counts = {}
     for entry in history:
-        video_name = entry.get('video_name', '')
-        counts[video_name] = counts.get(video_name, 0) + 1
+        video_name = entry.get('video_name', '').strip().lower()
+        if video_name:
+            counts[video_name] = counts.get(video_name, 0) + 1
     return counts
 
 
@@ -182,6 +183,7 @@ def fetch_one_video_from_drive(allow_repost=False):
 
     # Get list of already published videos
     published = get_published_videos()
+    published_set = set(p.strip().lower() for p in published if p)
     print(f"Already published: {len(published)} video(s)")
     if published:
         for vid in published[:3]:  # Show first 3
@@ -214,8 +216,8 @@ def fetch_one_video_from_drive(allow_repost=False):
     for video_info in videos:
         video_name = video_info['name']
 
-        # Check if already published
-        if video_name in published:
+        # Check if already published (case-insensitive & trimmed)
+        if video_name in published or video_name.strip().lower() in published_set:
             print(f"Skipping {video_name} - already published")
             continue
 
@@ -252,7 +254,7 @@ def fetch_one_video_from_drive(allow_repost=False):
         weights = []
         for video_info in videos:
             vname = video_info['name']
-            count = repost_counts.get(vname, 0)
+            count = repost_counts.get(vname.strip().lower(), 0)
             # Weight decreases exponentially with repost count
             # 0 posts=1000, 1 post=333, 2 posts=111, 3 posts=37, etc.
             weight = max(1, 1000 // (3 ** min(count, 6)))
