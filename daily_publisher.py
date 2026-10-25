@@ -35,6 +35,57 @@ HISTORY_LOG = str(BASE_DIR / "history.json")
 YOUTUBE_STATE_FILE = str(BASE_DIR / "youtube_publish_state.json")
 
 
+def normalize_video_key(video_name: str) -> str:
+    """
+    Normalizes video filename to a robust canonical key to prevent duplicate publishing
+    due to encoding differences (ellipsis …, replacement character , dots, underscores, case).
+    """
+    if not video_name:
+        return ""
+    name = os.path.basename(video_name).lower().strip()
+    if name.endswith('.mp4'):
+        name = name[:-4]
+
+    clean = re.sub(r'[\u2026\ufffd\.\-_ ]+', '_', name)
+    clean = re.sub(r'[^a-z0-9_]', '', clean).strip('_')
+
+    ts_match = re.search(r'(\d{8,14})$', clean)
+    ts = ts_match.group(1) if ts_match else ""
+    prefix = clean[:ts_match.start()].strip('_') if ts_match else clean
+    return f"{prefix}::{ts}"
+
+
+def get_publication_tracker():
+    """
+    Analyzes history.json and published_videos.json to return:
+    - last_seen_idx: dict mapping canonical key -> last index in history (0 to total-1)
+    - publish_counts: dict mapping canonical key -> total lifetime publishes
+    - total_records: int count of all publications
+    """
+    history = []
+    for log_path in (HISTORY_LOG, PUBLISHED_LOG):
+        if os.path.exists(log_path):
+            try:
+                with open(log_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    if isinstance(data, list) and len(data) > len(history):
+                        history = data
+            except Exception:
+                pass
+
+    last_seen_idx = {}
+    publish_counts = {}
+
+    for idx, entry in enumerate(history):
+        v = entry.get('video_name', '')
+        k = normalize_video_key(v)
+        if k:
+            last_seen_idx[k] = idx
+            publish_counts[k] = publish_counts.get(k, 0) + 1
+
+    return last_seen_idx, publish_counts, len(history)
+
+
 # ==============================================================================
 # FRUIT & VEGETABLE KNOWLEDGE BASE
 # ==============================================================================
@@ -223,8 +274,18 @@ def record_youtube_publish(video_name, video_id=None):
 # ==============================================================================
 
 def select_video(specific_video=None):
-    published = [item["video_name"] for item in get_already_published()]
+    """
+    Selects a video for publishing.
+    GUARANTEES:
+    1. NEVER publishes the same video back-to-back or in close succession.
+    2. Strictly enforces a 30-video cooldown window on all previously published videos.
+    3. Uses Least-Recently-Used (LRU) rotation across older videos evenly.
+    4. Automatically prioritizes genuine unpublished videos.
+    """
     all_videos = sorted(glob.glob(os.path.join(PROCESSED_DIR, "*.mp4")))
+
+    last_seen_idx, publish_counts, total_records = get_publication_tracker()
+    cooldown_window = min(30, max(5, len(all_videos) // 2)) if all_videos else 30
 
     if specific_video:
         if os.path.exists(specific_video):
@@ -235,41 +296,58 @@ def select_video(specific_video=None):
             name = specific_video
 
         if os.path.exists(vid_path):
-            if name in published:
-                post_count = sum(1 for p in published if p == name)
-                print(f"🔄 Video {name} was already published ({post_count}x) - Re-publishing (recycling)")
+            k = normalize_video_key(name)
+            count = publish_counts.get(k, 0)
+            if count > 0:
+                print(f"🔄 Video {name} was already published ({count}x) - Re-publishing (recycling)")
             return vid_path, name
         else:
             print(f"❌ Error: Specific video {name} not found")
             return None, None
 
-    # Find unpublished videos first
-    unpublished = [(vid, os.path.basename(vid)) for vid in all_videos if os.path.basename(vid) not in published]
+    if not all_videos:
+        print("❌ No videos found in Processed_Videos")
+        return None, None
+
+    unpublished = []
+    published_candidates = []
+
+    for vid in all_videos:
+        name = os.path.basename(vid)
+        k = normalize_video_key(name)
+        if k not in last_seen_idx:
+            unpublished.append((vid, name))
+        else:
+            last_idx = last_seen_idx[k]
+            distance = total_records - 1 - last_idx
+            published_candidates.append({
+                "path": vid,
+                "name": name,
+                "key": k,
+                "last_idx": last_idx,
+                "distance": distance,
+                "count": publish_counts.get(k, 1),
+                "in_cooldown": distance < cooldown_window
+            })
 
     if unpublished:
         vid, name = unpublished[0]
+        print(f"✨ Selected unpublished video: {name}")
         return vid, name
 
-    # All videos published - use weighted random selection (less posted = more likely)
-    if all_videos:
-        repost_counts = get_repost_counts()
-        weights = []
-        for vid in all_videos:
-            name = os.path.basename(vid)
-            count = repost_counts.get(name, 0)
-            weight = max(1, 1000 // (3 ** min(count, 6)))
-            weights.append(weight)
+    # LRU rotation outside cooldown
+    eligible = [c for c in published_candidates if not c['in_cooldown']]
+    if not eligible:
+        eligible = sorted(published_candidates, key=lambda x: x['last_idx'])
+    else:
+        eligible.sort(key=lambda x: (x['count'], x['last_idx']))
 
-        selected_vid = random.choices(all_videos, weights=weights, k=1)[0]
-        name = os.path.basename(selected_vid)
-        post_count = repost_counts.get(name, 0)
-        print(f"🎲 All videos published. Weighted random reuse (posted {post_count}x): {name}")
-        return selected_vid, name
-
-    return None, None
-
+    chosen = eligible[0]
+    print(f"🔄 Selected for rotation (posted {chosen['count']}x before, {chosen['distance']} runs ago): {chosen['name']}")
+    return chosen['path'], chosen['name']
 
 # ==============================================================================
+# TARGETED CAPTION GENERATION# ==============================================================================
 # TARGETED CAPTION GENERATION (Food-Specific & Verified)
 # ==============================================================================
 

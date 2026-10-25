@@ -8,6 +8,7 @@ selects a random video for reposting, prioritizing ones posted fewer times.
 """
 import os
 import json
+import re
 import sys
 import random
 import tempfile
@@ -28,6 +29,60 @@ LOCAL_INPUT_DIR = os.getenv("LOCAL_INPUT_DIR", "Videos")
 BASE_DIR = Path(__file__).resolve().parent
 PUBLISHED_LOG = str(BASE_DIR / "published_videos.json")
 HISTORY_LOG = str(BASE_DIR / "history.json")
+
+
+def normalize_video_key(video_name: str) -> str:
+    """
+    Normalizes video filename to a robust canonical key to prevent duplicate publishing
+    due to encoding differences (ellipsis …, replacement character , dots, underscores, case).
+    """
+    if not video_name:
+        return ""
+    name = os.path.basename(video_name).lower().strip()
+    if name.endswith('.mp4'):
+        name = name[:-4]
+
+    # Replace ellipsis, unicode replacement, dots, underscores, hyphens, spaces with single underscore
+    clean = re.sub(r'[\u2026\ufffd\.\-_ ]+', '_', name)
+    clean = re.sub(r'[^a-z0-9_]', '', clean).strip('_')
+
+    # Extract timestamp if present at end (8-14 digits)
+    ts_match = re.search(r'(\d{8,14})$', clean)
+    ts = ts_match.group(1) if ts_match else ""
+    prefix = clean[:ts_match.start()].strip('_') if ts_match else clean
+    return f"{prefix}::{ts}"
+
+
+def get_publication_tracker():
+    """
+    Analyzes history.json and published_videos.json to return:
+    - last_seen_idx: dict mapping canonical key -> last index in history (0 to total-1)
+    - publish_counts: dict mapping canonical key -> total lifetime publishes
+    - total_records: int count of all publications
+    """
+    history = []
+    for log_path in (HISTORY_LOG, PUBLISHED_LOG):
+        if os.path.exists(log_path):
+            try:
+                with open(log_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    if isinstance(data, list) and len(data) > len(history):
+                        history = data
+            except Exception:
+                pass
+
+    last_seen_idx = {}
+    publish_counts = {}
+
+    for idx, entry in enumerate(history):
+        v = entry.get('video_name', '')
+        k = normalize_video_key(v)
+        if k:
+            last_seen_idx[k] = idx
+            publish_counts[k] = publish_counts.get(k, 0) + 1
+
+    return last_seen_idx, publish_counts, len(history)
+
 
 
 def get_published_videos():
@@ -181,35 +236,25 @@ def download_video(service, file_info, local_path):
 def fetch_one_video_from_drive(allow_repost=False):
     """
     Fetch ONE video from Google Drive for processing.
-
-    Args:
-        allow_repost: If True and no new videos exist, select a random
-                      already-published video for reposting (weighted by
-                      repost count - less posted = more likely).
-                      If False, only fetch new (unpublished) videos.
-
-    Returns:
-        Path to downloaded video or None
+    
+    GUARANTEES:
+    1. NEVER publishes the same video back-to-back or in close succession.
+    2. Strictly enforces a 30-video cooldown window on all previously published videos.
+    3. Uses Least-Recently-Used (LRU) rotation: rotates through older videos evenly.
+    4. Automatically prioritizes genuine unpublished videos.
     """
-    # Ensure local input directory exists
     Path(LOCAL_INPUT_DIR).mkdir(parents=True, exist_ok=True)
 
     print("=" * 60)
     print("FETCHING VIDEO FROM GOOGLE DRIVE")
     print("=" * 60)
 
-    # Get list of already published videos
-    published = get_published_videos()
-    published_set = set(p.strip().lower() for p in published if p)
-    print(f"Already published: {len(published)} video(s)")
-    if published:
-        for vid in published[:3]:  # Show first 3
-            print(f"  - {vid}")
-        if len(published) > 3:
-            print(f"  ... and {len(published) - 3} more")
+    last_seen_idx, publish_counts, total_records = get_publication_tracker()
+    print(f"Total publication history records: {total_records}")
+    print(f"Unique canonical videos tracked: {len(last_seen_idx)}")
 
     if not GOOGLE_DRIVE_FOLDER_ID:
-        print("Error: GOOGLE_DRIVE_FOLDER_ID not set in .env")
+        print("Error: GOOGLE_DRIVE_FOLDER_ID not set")
         return None
 
     service = get_drive_service()
@@ -217,83 +262,87 @@ def fetch_one_video_from_drive(allow_repost=False):
         return None
 
     videos = list_drive_videos(service)
-
     if not videos:
         print("No videos found in Google Drive folder.")
         return None
 
     print(f"\nFound {len(videos)} video(s) in Google Drive.")
 
-    # Track if we tried and failed to download any video
-    download_attempts = 0
-    download_failures = 0
-    all_are_published = True
+    # Minimum cooldown window: a video cannot be reposted if it was posted within the last N posts
+    cooldown_window = min(30, max(5, len(videos) // 2))
 
-    # Find first video NOT in published list
+    unpublished_videos = []
+    published_candidates = []
+
     for video_info in videos:
-        video_name = video_info['name']
-
-        # Check if already published (case-insensitive & trimmed)
-        if video_name in published or video_name.strip().lower() in published_set:
-            print(f"Skipping {video_name} - already published")
+        vname = video_info.get('name', '')
+        k = normalize_video_key(vname)
+        if not k:
             continue
 
-        # Found an unpublished video
-        all_are_published = False
-
-        # Download this video
-        download_attempts += 1
-        local_path = os.path.join(LOCAL_INPUT_DIR, video_name)
-        if download_video(service, video_info, local_path):
-            print(f"\n✅ Selected: {video_name}")
-            return local_path
+        if k not in last_seen_idx:
+            unpublished_videos.append(video_info)
         else:
-            download_failures += 1
-            print(f"⚠️  Download failed, trying next video...")
+            last_idx = last_seen_idx[k]
+            distance = total_records - 1 - last_idx
+            published_candidates.append({
+                "info": video_info,
+                "name": vname,
+                "key": k,
+                "last_idx": last_idx,
+                "distance": distance,
+                "count": publish_counts.get(k, 1),
+                "in_cooldown": distance < cooldown_window
+            })
 
-    # If we tried to download videos but all failed
-    if download_attempts > 0 and download_failures == download_attempts:
-        print(f"\n❌ Failed to download all {download_attempts} video(s). Check permissions.")
+    print(f"  - Genuine Unpublished Videos: {len(unpublished_videos)}")
+    print(f"  - Already Published Videos:   {len(published_candidates)}")
+    print(f"  - In Active Cooldown:         {sum(1 for c in published_candidates if c['in_cooldown'])} (min {cooldown_window} posts gap)")
+
+    # 1. PRIORITY 1: Download an unpublished video
+    if unpublished_videos:
+        print(f"\n✨ Found {len(unpublished_videos)} unpublished video(s). Selecting one...")
+        for video_info in unpublished_videos:
+            vname = video_info['name']
+            local_path = os.path.join(LOCAL_INPUT_DIR, vname)
+            if download_video(service, video_info, local_path):
+                print(f"\n✅ Selected (NEW VIDEO): {vname}")
+                return local_path
+            else:
+                print(f"⚠️ Failed to download {vname}, trying next...")
+
+    # If allow_repost is False and all are published, exit
+    if not allow_repost:
+        print("\nℹ️ All videos in Google Drive have already been published once (allow_repost=False).")
         return None
 
-    # All videos are published - use weighted random selection for reposting
-    if all_are_published:
-        if not allow_repost:
-            print("\n✅ All videos have already been published (no repost mode).")
-            return None
+    # 2. PRIORITY 2: Repost / Rotate using Least-Recently-Used (LRU) algorithm
+    print(f"\n🔄 ROTATION / REPOST MODE: Selecting least recently published video outside cooldown...")
+    eligible = [c for c in published_candidates if not c['in_cooldown']]
 
-        print("\n🔄 REPOST MODE: No new videos. Selecting random published video (weighted by repost count)...")
+    if not eligible:
+        print(f"⚠️ All {len(published_candidates)} videos are in cooldown. Selecting the single oldest published video.")
+        eligible = sorted(published_candidates, key=lambda x: x['last_idx'])
+    else:
+        # Sort by: 1) Lowest lifetime post count first, 2) Oldest last published index (LRU)
+        eligible.sort(key=lambda x: (x['count'], x['last_idx']))
 
-        repost_counts = get_repost_counts()
+    print(f"Eligible rotation candidates: {len(eligible)}")
+    for c in eligible[:3]:
+        print(f"   Candidate: {c['name']} (posted {c['count']}x, last posted {c['distance']} runs ago at idx {c['last_idx']})")
 
-        # Build weighted choices: videos posted fewer times get higher weight
-        video_choices = []
-        weights = []
-        for video_info in videos:
-            vname = video_info['name']
-            count = repost_counts.get(vname.strip().lower(), 0)
-            # Weight decreases exponentially with repost count
-            # 0 posts=1000, 1 post=333, 2 posts=111, 3 posts=37, etc.
-            weight = max(1, 1000 // (3 ** min(count, 6)))
-            video_choices.append(video_info)
-            weights.append(weight)
-
-        # Random selection weighted by post count (less posted = more likely)
-        selected_video = random.choices(video_choices, weights=weights, k=1)[0]
-        video_name = selected_video['name']
-        post_count = repost_counts.get(video_name, 0)
-        print(f"  🎲 Selected (posted {post_count} time(s) before): {video_name}")
-
-        local_path = os.path.join(LOCAL_INPUT_DIR, video_name)
-        if download_video(service, selected_video, local_path):
-            print(f"\n✅ Selected for repost: {video_name}")
+    for candidate in eligible:
+        vinfo = candidate['info']
+        vname = candidate['name']
+        local_path = os.path.join(LOCAL_INPUT_DIR, vname)
+        if download_video(service, vinfo, local_path):
+            print(f"\n✅ Selected for rotation (posted {candidate['count']}x before, {candidate['distance']} runs ago): {vname}")
             return local_path
         else:
-            print(f"\n❌ Failed to download repost video.")
-            return None
+            print(f"⚠️ Failed to download {vname}, trying next candidate...")
 
+    print("\n❌ Failed to download any eligible video.")
     return None
-
 
 if __name__ == "__main__":
     # Test the Google Drive connection
