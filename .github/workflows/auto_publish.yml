@@ -2,10 +2,8 @@ name: Auto Publish Videos
 
 on:
   schedule:
-   
     - cron: '0 8 * * *'
- 
-  workflow_dispatch: # Allow manual trigger
+  workflow_dispatch:
 
 permissions:
   contents: write
