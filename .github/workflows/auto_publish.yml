@@ -166,35 +166,7 @@ jobs:
           git pull --rebase origin main || git rebase --abort || true
           
           # Merge local backup records with any remote records
-          python3 -c "
-import json, os
-
-def merge_logs(target_file, backup_file):
-    records_map = {}
-    for path in (target_file, backup_file):
-        if os.path.exists(path):
-            try:
-                with open(path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    if isinstance(data, list):
-                        for item in data:
-                            vname = item.get('video_name')
-                            if vname and vname not in records_map:
-                                records_map[vname] = item
-            except Exception:
-                pass
-    merged = list(records_map.values())
-    if merged:
-        with open(target_file, 'w', encoding='utf-8') as f:
-            json.dump(merged, f, indent=4)
-
-merge_logs('published_videos.json', '/tmp/state_backup/published_videos.json')
-merge_logs('history.json', '/tmp/state_backup/history.json')
-
-if os.path.exists('/tmp/state_backup/youtube_publish_state.json'):
-    import shutil
-    shutil.copy('/tmp/state_backup/youtube_publish_state.json', 'youtube_publish_state.json')
-"
+          python scripts/merge_publish_state.py /tmp/state_backup
           
           # Stage and commit
           [ -f published_videos.json ] && git add published_videos.json
