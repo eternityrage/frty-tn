@@ -6,10 +6,61 @@ Enhanced with comprehensive debugging and error handling.
 """
 
 import os
+import time
 import requests
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+
+def _is_transient_graph_response(res):
+    """True for rate-limit / temporary Graph errors worth retrying.
+
+    Error code 4 ("Application request limit reached") is transient.
+    Other 4xx errors (bad token, bad parameter) are permanent and must
+    fail fast without retrying.
+    """
+    try:
+        if res.status_code == 429:
+            return True
+        if 500 <= res.status_code < 600:
+            return True
+        if res.status_code != 200:
+            compact = (res.text or "").replace(" ", "")
+            return '"code":4' in compact
+        return False
+    except Exception:
+        return False
+
+
+def _graph_post(url, data=None, timeout=30, phase="request", tries=3):
+    """POST a small form request to the Graph API with backoff on
+    transient failures (rate limit, 5xx, timeouts). Returns the last
+    response so callers keep their existing error handling; raises the
+    last network exception if no response was ever received."""
+    last_exc = None
+    res = None
+    for attempt in range(1, tries + 1):
+        try:
+            res = requests.post(url, data=data, timeout=timeout)
+        except (requests.exceptions.Timeout,
+                requests.exceptions.ConnectionError) as e:
+            last_exc = e
+            res = None
+        if res is not None and (
+                res.status_code == 200 or not _is_transient_graph_response(res)):
+            return res
+        if attempt < tries:
+            wait = min(15 * (2 ** (attempt - 1)), 60)
+            detail = res.text[:200] if res is not None else str(last_exc)
+            print(f"[facebook] Transient error in {phase} "
+                  f"(attempt {attempt}/{tries}): {detail} - retrying in {wait}s...")
+            time.sleep(wait)
+    if res is not None:
+        return res
+    raise last_exc
+
+
 
 # Load environment variables with override
 env_path = Path(__file__).parent.parent / '.env'
@@ -70,7 +121,8 @@ def upload_to_facebook(video_path, description, title="FruityToon"):
             'upload_phase': 'start',
             'file_size': file_size
         }
-        res_start = requests.post(start_url, data=start_data, timeout=30)
+        res_start = _graph_post(start_url, data=start_data, timeout=30,
+                                phase="reel start")
         
         if res_start.status_code != 200:
             print(f"[facebook] ❌ Start Phase Error: {res_start.text}")
@@ -117,7 +169,8 @@ def upload_to_facebook(video_path, description, title="FruityToon"):
             'description': caption_text,
             'video_state': 'PUBLISHED'
         }
-        res_finish = requests.post(finish_url, data=finish_data, timeout=60)
+        res_finish = _graph_post(finish_url, data=finish_data, timeout=60,
+                                phase="reel finish")
         
         if res_finish.status_code == 200 and res_finish.json().get('success'):
             print(f"[facebook] ✅ SUCCESS! Reel uploaded to Facebook!")
@@ -193,7 +246,8 @@ def upload_to_facebook_story(video_path):
             'upload_phase': 'start',
             'file_size': file_size
         }
-        res_start = requests.post(start_url, data=start_data, timeout=30)
+        res_start = _graph_post(start_url, data=start_data, timeout=30,
+                                phase="story start")
         
         if res_start.status_code != 200:
              # If "start" fails, we can't proceed. Log detailed error.
@@ -230,7 +284,8 @@ def upload_to_facebook_story(video_path):
             if upload_session_id:
                  finish_data['upload_session_id'] = upload_session_id
                  
-            res_finish = requests.post(finish_url, data=finish_data, timeout=60)
+            res_finish = _graph_post(finish_url, data=finish_data, timeout=60,
+                                phase="story finish")
             
             if res_finish.status_code == 200 or res_finish.json().get('success'):
                 print(f"[facebook] ✅ SUCCESS! Story uploaded!")
@@ -267,7 +322,8 @@ def upload_to_facebook_story(video_path):
                 'upload_session_id': upload_session_id,
                  'title': 'Story Upload'
             }
-            res_finish = requests.post(finish_url, data=finish_data, timeout=60)
+            res_finish = _graph_post(finish_url, data=finish_data, timeout=60,
+                                phase="story finish")
             
             if res_finish.status_code == 200 or res_finish.json().get('success'):
                 print(f"[facebook] ✅ SUCCESS! Story uploaded!")
