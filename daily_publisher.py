@@ -351,10 +351,37 @@ def select_video(specific_video=None):
 # TARGETED CAPTION GENERATION (Food-Specific & Verified)
 # ==============================================================================
 
+def build_hybrid_description(base_desc, food_name, nutrients, benefits, clean_tag):
+    """Combine a punchy hook with a keyword-rich SEO body for health search.
+
+    Keeps the hook/CTA, inserts sentences built from the verified
+    nutrients/benefits entry ahead of the hashtag block, and guarantees
+    a full hashtag set. Total stays well under Instagram's 2200-char cap.
+    """
+    seo_body = (
+        f"{food_name} is rich in {nutrients}. "
+        f"{food_name} {benefits}. "
+        f"Add {food_name.lower()} to your daily routine for clean whole-food "
+        f"nutrition that supports a healthy lifestyle."
+    )
+    tags = (
+        f"#fruitytoon #{clean_tag} #healthyeating #nutrition "
+        f"#fruits #vegetables #animation #cartoon #shorts #reels #foodfacts"
+    )
+    marker = "\n\n#"
+    if marker in base_desc:
+        head, _, tail = base_desc.rpartition(marker)
+        return f"{head}\n\n{seo_body}\n\n#{tail}"
+    head = base_desc.rstrip()
+    if "#" not in head:
+        return f"{head}\n\n{seo_body}\n\n{tags}"
+    return f"{head}\n\n{seo_body}"
+
+
 def generate_caption(video_name=None, video_path=None):
     """
-    Generates a properly matched, concise, high-converting title and description
-    based on the exact fruit or vegetable in the video (short, reel-friendly, NO essays).
+    Generates a hybrid title and description for the exact fruit or vegetable
+    in the video: a short punchy hook plus a keyword-rich health SEO body.
     """
     target_video = video_name or (os.path.basename(video_path) if video_path else "")
     subject = extract_video_subject(target_video)
@@ -378,7 +405,10 @@ def generate_caption(video_name=None, video_path=None):
 
     if not api_key:
         print(f"ℹ️  Using verified {food_name} database templates (no POLLINATIONS_API_KEY).")
-        return random.choice(fallback_titles), random.choice(fallback_descriptions)
+        fallback_title = random.choice(fallback_titles)
+        hybrid_desc = build_hybrid_description(
+            random.choice(fallback_descriptions), food_name, nutrients, benefits, clean_tag)
+        return fallback_title, hybrid_desc
 
     vibes = [
         f"silly, high-energy cartoon chaos starring the animated {food_name} {food_emoji}",
@@ -393,12 +423,13 @@ def generate_caption(video_name=None, video_path=None):
         f"Character: {food_name} {food_emoji}.\n"
         f"Health benefits to feature: {nutrients} -> {benefits}.\n"
         f"Tone: {chosen_vibe}.\n\n"
-        f"STRICT REQUIREMENTS (NO ESSAYS / KEEP IT REEL-FRIENDLY):\n"
+        f"HYBRID REQUIREMENTS (PUNCHY HOOK + HEALTH SEO BODY):\n"
         f"1. TITLE: Catchy short hook under 60 characters with emoji (e.g. 'Why Apple is Quietly Winning! 🍎💪').\n"
-        f"2. DESCRIPTION: Max 1 to 2 funny, punchy sentences highlighting real health benefits. NO LONG ESSAYS OR WALLS OF TEXT.\n"
-        f"3. CALL TO ACTION: Exactly 1 short engaging line (e.g. 'What is your favorite fruit? Let us know below! 👇').\n"
-        f"4. HASHTAGS: Exactly 5 to 7 clean lowercase hashtags without special symbols: #fruitytoon #{clean_tag} #healthyeating #fruits #animation #cartoon #shorts #reels.\n"
-        f'5. OUTPUT FORMAT: Return ONLY a valid JSON object: {{"title": "...", "description": "..."}} without markdown code blocks.\n'
+        f"2. HOOK: 1 to 2 funny, punchy sentences up front to stop the scroll.\n" +
+        f"3. SEO BODY: 2 to 4 sentences AFTER the hook using real health-search keywords from the benefits above (nutrient names, what they do, whole-food nutrition, daily routine). Total description 60-120 words, no walls of text.\n" +
+        f"4. CALL TO ACTION: Exactly 1 short engaging line (e.g. 'What is your favorite fruit? Let us know below! 👇').\n"
+        f"5. HASHTAGS: 8 to 12 clean lowercase hashtags without special symbols: #fruitytoon #{clean_tag} #healthyeating #nutrition #fruits #vegetables #animation #cartoon #shorts #reels #foodfacts.\n"
+        f'6. OUTPUT FORMAT: Return ONLY a valid JSON object: {{"title": "...", "description": "..."}} with description = hook, blank line, SEO body, blank line, CTA, blank line, hashtags. No markdown code blocks.\n'
     )
 
     url = "https://gen.pollinations.ai/v1/chat/completions"
@@ -430,16 +461,22 @@ def generate_caption(video_name=None, video_path=None):
             if gen_title and gen_desc:
                 # Ensure hashtags are present if omitted by AI
                 if "#" not in gen_desc:
-                    gen_desc = f"{gen_desc.rstrip()}\n\n#fruitytoon #{clean_tag} #healthyeating #fruits #animation #cartoon #shorts #reels"
+                    gen_desc = f"{gen_desc.rstrip()}\n\n#fruitytoon #{clean_tag} #healthyeating #nutrition #fruits #vegetables #animation #cartoon #shorts #reels #foodfacts"
                 print(f"✨ AI generated targeted caption for {food_name}!")
                 return gen_title, gen_desc
 
         print(f"⚠️  AI response invalid. Falling back to tailored {food_name} template.")
-        return random.choice(fallback_titles), random.choice(fallback_descriptions)
+        fallback_title = random.choice(fallback_titles)
+        hybrid_desc = build_hybrid_description(
+            random.choice(fallback_descriptions), food_name, nutrients, benefits, clean_tag)
+        return fallback_title, hybrid_desc
 
     except Exception as e:
         print(f"⚠️  Notice: AI caption generation fell back to {food_name} template ({e})")
-        return random.choice(fallback_titles), random.choice(fallback_descriptions)
+        fallback_title = random.choice(fallback_titles)
+        hybrid_desc = build_hybrid_description(
+            random.choice(fallback_descriptions), food_name, nutrients, benefits, clean_tag)
+        return fallback_title, hybrid_desc
     vibes = [
         f"silly, high-energy cartoon chaos starring the animated {food_name} {food_emoji}",
         f"relatable comedy poking fun at picky eaters while praising {food_name}'s superpowers",
@@ -496,11 +533,17 @@ def generate_caption(video_name=None, video_path=None):
                 return gen_title, gen_desc
 
         print(f"⚠️  AI response invalid. Falling back to tailored {food_name} template.")
-        return random.choice(fallback_titles), random.choice(fallback_descriptions)
+        fallback_title = random.choice(fallback_titles)
+        hybrid_desc = build_hybrid_description(
+            random.choice(fallback_descriptions), food_name, nutrients, benefits, clean_tag)
+        return fallback_title, hybrid_desc
 
     except Exception as e:
         print(f"⚠️  Notice: AI caption generation fell back to {food_name} template ({e})")
-        return random.choice(fallback_titles), random.choice(fallback_descriptions)
+        fallback_title = random.choice(fallback_titles)
+        hybrid_desc = build_hybrid_description(
+            random.choice(fallback_descriptions), food_name, nutrients, benefits, clean_tag)
+        return fallback_title, hybrid_desc
 
 
 # ==============================================================================

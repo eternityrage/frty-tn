@@ -180,5 +180,32 @@ class TestFacebookTransientRetry(unittest.TestCase):
                                     "rate-limited start phase was not retried")
 
 
+class TestHybridCaption(unittest.TestCase):
+    def test_fallback_caption_carries_seo_keywords(self):
+        with mock.patch.dict(os.environ, {"POLLINATIONS_API_KEY": ""}):
+            title, desc = daily_publisher.generate_caption(
+                video_name="Apple_crunch_20261001010101.mp4")
+        self.assertTrue(title and len(title) <= 70)
+        self.assertIn("vitamin C", desc)        # nutrient keyword
+        self.assertIn("heart wellness", desc)   # benefit keyword
+        self.assertIn("#fruitytoon #apple", desc)
+        self.assertLessEqual(len(desc), 2200)
+
+    def test_seo_body_inserted_before_hashtags(self):
+        out = daily_publisher.build_hybrid_description(
+            "Hook line!\n\nCTA here? \U0001F447\n\n#fruitytoon #apple #shorts",
+            "Apple", "vitamin C", "supports heart wellness", "apple")
+        first_hash = out.index("#")
+        self.assertIn("supports heart wellness", out[:first_hash])
+        self.assertTrue(out.rstrip().endswith("#shorts"))
+
+    def test_hybrid_builder_adds_tags_when_missing(self):
+        out = daily_publisher.build_hybrid_description(
+            "Just a hook, no tags.", "Banana", "potassium",
+            "supports muscles", "banana")
+        self.assertIn("#fruitytoon #banana", out)
+        self.assertIn("potassium", out)
+
+
 if __name__ == "__main__":
     unittest.main()
