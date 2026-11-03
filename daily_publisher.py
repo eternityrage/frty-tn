@@ -401,7 +401,7 @@ def generate_caption(video_name=None, video_path=None):
     ]
 
     api_key = os.getenv("POLLINATIONS_API_KEY")
-    model = os.getenv("AI_MODEL", "gemini-fast")
+    model = os.getenv("AI_MODEL", "openai/gpt-5.4-nano")
 
     if not api_key:
         print(f"ℹ️  Using verified {food_name} database templates (no POLLINATIONS_API_KEY).")
