@@ -2968,5 +2968,25 @@
             },
             "recycled": false
         }
+    },
+    {
+        "video_name": "Apple_and_banana_talking_20260930055625.mp4",
+        "metadata": {
+            "title": "Banana Goes BONKERS for Your Brain! \ud83c\udf4c\ud83e\udde0",
+            "description": "This banana is powered by pure chaos and potassium!\n\nWatch as our high-energy hero fuels your brain function and fights off muscle cramps with essential vitamin B6 and natural electrolytes. Get your daily dose of prebiotic fiber in the most hilarious way possible for a mood boost and better whole-food nutrition.\n\nWhat's your go-to mood-boosting snack? Tell us! \ud83d\udc47\n\n#fruitytoon #banana #healthyeating #nutrition #fruits #animation #cartoon #shorts #reels #foodfacts #brainfood #moodbooster",
+            "subject": "Banana",
+            "published_at": "2026-11-14T14:54:26.514090+00:00",
+            "youtube_published_at": null,
+            "youtube_status": "skipped",
+            "success_flags": {
+                "instagram_reel": true,
+                "instagram_story": true,
+                "facebook_reel": true,
+                "facebook_story": false,
+                "threads": "skipped",
+                "youtube": "skipped"
+            },
+            "recycled": true
+        }
     }
 ]
